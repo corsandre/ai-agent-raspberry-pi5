@@ -1,0 +1,240 @@
+version: '3.8'
+
+x-common-variables: &common-variables
+  TZ: ${TZ:-UTC}
+  PUID: ${PUID:-1000}
+  PGID: ${PGID:-1000}
+  WORKSPACE_DIR: /workspace
+  DATA_DIR: /data
+
+services:
+  # Redis for caching and rate limiting
+  redis:
+    image: redis:7-alpine
+    container_name: ai-agent-redis
+    restart: unless-stopped
+    command: redis-server --save 60 1 --loglevel warning
+    volumes:
+      - redis-data:/data
+    ports:
+      - "6379:6379"
+    networks:
+      - ai-network
+    deploy:
+      resources:
+        limits:
+          memory: 256M
+          cpus: '0.5'
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+
+  # Vector database for persistent memory
+  chromadb:
+    image: chromadb/chroma:0.4.22
+    container_name: ai-agent-chromadb
+    restart: unless-stopped
+    volumes:
+      - chroma-data:/chroma/chroma
+      - ./config/chromadb_config.json:/chroma/chroma/config.json:ro
+    ports:
+      - "8000:8000"
+    environment:
+      - IS_PERSISTENT=TRUE
+      - PERSIST_DIRECTORY=/chroma/chroma
+      - ANONYMIZED_TELEMETRY=FALSE
+    networks:
+      - ai-network
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/api/v1/heartbeat"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+    deploy:
+      resources:
+        limits:
+          memory: 512M
+          cpus: '1.0'
+
+  # LiteLLM proxy for multi-model support
+  litellm:
+    build:
+      context: ./litellm
+      dockerfile: Dockerfile.litellm
+    container_name: ai-agent-litellm
+    restart: unless-stopped
+    volumes:
+      - ./config/litellm_config.yaml:/app/config.yaml:ro
+      - ./config/models.json:/app/models.json:ro
+    ports:
+      - "4000:4000"
+    environment:
+      <<: *common-variables
+      KIMI_API_KEY: ${KIMI_API_KEY}
+      OPENAI_API_KEY: ${OPENAI_API_KEY:-not_set}
+      CLAUDE_API_KEY: ${CLAUDE_API_KEY:-not_set}
+      ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:-not_set}
+      LITELLM_PORT: 4000
+      LITELLM_HOST: 0.0.0.0
+      REDIS_HOST: redis
+      REDIS_PORT: 6379
+    depends_on:
+      redis:
+        condition: service_healthy
+    networks:
+      - ai-network
+    deploy:
+      resources:
+        limits:
+          memory: 512M
+          cpus: '1.0'
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:4000/health"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+
+  # Main AI agent container
+  ai-agent:
+    build: .
+    container_name: ai-agent-main
+    restart: unless-stopped
+    volumes:
+      - ./config:/app/config:ro
+      - ai-workspace:/workspace
+      - ./logs:/app/logs
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+      - ${WORKSPACE_PATH:-./host-workspace}:/host-workspace:ro
+    ports:
+      - "3000:3000"  # Main API
+      - "5000:5000"  # Tool API
+    environment:
+      <<: *common-variables
+      KIMI_API_KEY: ${KIMI_API_KEY}
+      REDIS_URL: redis://redis:6379
+      CHROMA_HOST: chromadb
+      CHROMA_PORT: 8000
+      LITELLM_URL: http://litellm:4000
+      AGENT_HOST: 0.0.0.0
+      AGENT_PORT: 3000
+      TOOL_API_PORT: 5000
+      DEFAULT_MODEL: ${DEFAULT_MODEL:-kimi-2.5k}
+      ALLOWED_HOSTS: ${ALLOWED_HOSTS:-localhost,127.0.0.1}
+      JWT_SECRET_KEY: ${JWT_SECRET_KEY}
+      MAX_FILE_SIZE_MB: ${MAX_FILE_SIZE_MB:-10}
+      COMMAND_TIMEOUT_SECONDS: ${COMMAND_TIMEOUT_SECONDS:-30}
+    depends_on:
+      redis:
+        condition: service_healthy
+      chromadb:
+        condition: service_started
+      litellm:
+        condition: service_healthy
+    networks:
+      - ai-network
+    security_opt:
+      - no-new-privileges:true
+    deploy:
+      resources:
+        limits:
+          memory: 2048M
+          cpus: '2.0'
+    healthcheck:
+      test: ["CMD", "python", "-c", "import requests; requests.get('http://localhost:3000/health', timeout=2)"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+
+  # Optional: Web UI (Open WebUI)
+  web-ui:
+    image: ghcr.io/open-webui/open-webui:main-arm64
+    container_name: ai-agent-webui
+    restart: unless-stopped
+    ports:
+      - "8080:8080"
+    volumes:
+      - webui-data:/app/backend/data
+      - ./config/open-webui.yaml:/app/backend/config.yaml:ro
+    environment:
+      - OPENAI_API_BASE=http://litellm:4000
+      - OPENAI_API_KEY=litellm
+      - WEBUI_SECRET_KEY=${JWT_SECRET_KEY}
+    depends_on:
+      - litellm
+    networks:
+      - ai-network
+    deploy:
+      resources:
+        limits:
+          memory: 512M
+          cpus: '0.5'
+
+  # Optional: Monitoring stack
+  prometheus:
+    image: prom/prometheus:latest-arm64
+    container_name: ai-agent-prometheus
+    restart: unless-stopped
+    ports:
+      - "9090:9090"
+    volumes:
+      - ./monitoring/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - prometheus-data:/prometheus
+    command:
+      - '--config.file=/etc/prometheus/prometheus.yml'
+      - '--storage.tsdb.path=/prometheus'
+      - '--web.console.libraries=/etc/prometheus/console_libraries'
+      - '--web.console.templates=/etc/prometheus/consoles'
+      - '--storage.tsdb.retention.time=200h'
+      - '--web.enable-lifecycle'
+    networks:
+      - ai-network
+
+  grafana:
+    image: grafana/grafana:latest-arm64
+    container_name: ai-agent-grafana
+    restart: unless-stopped
+    ports:
+      - "3001:3000"
+    volumes:
+      - grafana-data:/var/lib/grafana
+      - ./monitoring/dashboards:/etc/grafana/provisioning/dashboards
+      - ./monitoring/datasources:/etc/grafana/provisioning/datasources
+    environment:
+      - GF_SECURITY_ADMIN_PASSWORD=${GRAFANA_PASSWORD:-admin}
+      - GF_USERS_ALLOW_SIGN_UP=false
+    depends_on:
+      - prometheus
+    networks:
+      - ai-network
+
+networks:
+  ai-network:
+    driver: bridge
+    ipam:
+      config:
+        - subnet: 172.20.0.0/16
+
+volumes:
+  redis-data:
+    driver: local
+    driver_opts:
+      type: none
+      o: bind
+      device: ./data/redis
+  chroma-data:
+    driver: local
+    driver_opts:
+      type: none
+      o: bind
+      device: ./data/chroma
+  ai-workspace:
+    driver: local
+    driver_opts:
+      type: none
+      o: bind
+      device: ./workspace
+  webui-data:
+  prometheus-data:
+  grafana-data:

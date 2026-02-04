@@ -1,0 +1,47 @@
+{
+    "kimi-2.5k": {
+      "name": "Kimi 2.5k (Moonshot AI)",
+      "description": "Best for coding tasks, 128K context",
+      "provider": "moonshot",
+      "max_tokens": 128000,
+      "supports_function_calling": true,
+      "default": true
+    },
+    "kimi-1.8k": {
+      "name": "Kimi 1.8k",
+      "description": "Cheaper alternative, 8K context",
+      "provider": "moonshot",
+      "max_tokens": 8192,
+      "supports_function_calling": true
+    },
+    "gpt-4o-mini": {
+      "name": "GPT-4o Mini",
+      "description": "Fast and cheap OpenAI model",
+      "provider": "openai",
+      "max_tokens": 16384,
+      "supports_function_calling": true
+    },
+    "claude-3-haiku": {
+      "name": "Claude 3 Haiku",
+      "description": "Fast reasoning model",
+      "provider": "anthropic",
+      "max_tokens": 4096,
+      "supports_function_calling": true
+    },
+    "local-codellama": {
+      "name": "CodeLlama 7B (Local)",
+      "description": "Local coding model via Ollama",
+      "provider": "ollama",
+      "max_tokens": 4096,
+      "supports_function_calling": false,
+      "free": true
+    },
+    "local-phi": {
+      "name": "Phi-2 2.7B (Local)",
+      "description": "Small local model for simple tasks",
+      "provider": "ollama",
+      "max_tokens": 2048,
+      "supports_function_calling": false,
+      "free": true
+    }
+  }

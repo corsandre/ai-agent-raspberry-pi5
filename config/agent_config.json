@@ -1,0 +1,64 @@
+{
+    "agent": {
+      "name": "Pi5-AI-Agent",
+      "version": "1.0.0",
+      "description": "AI Assistant for Raspberry Pi 5 with persistent memory and CLI access",
+      "default_model": "kimi-2.5k",
+      "fallback_model": "local-codellama",
+      "temperature": 0.7,
+      "max_tokens": 4000,
+      "max_history": 20,
+      "timeout_seconds": 60
+    },
+    "memory": {
+      "chroma_host": "chromadb",
+      "chroma_port": 8000,
+      "embedding_model": "all-MiniLM-L6-v2",
+      "max_search_results": 10,
+      "collection_names": {
+        "conversations": "conversations",
+        "code_snippets": "code_snippets",
+        "projects": "project_context"
+      }
+    },
+    "tools": {
+      "allowed_commands": [
+        "ls", "cd", "pwd", "cat", "grep", "find", "mkdir", "touch",
+        "cp", "mv", "rm", "chmod", "python", "python3", "pip",
+        "git", "curl", "wget", "tar", "zip", "unzip", "df", "du"
+      ],
+      "restricted_paths": [
+        "/etc", "/root", "/boot", "/proc", "/sys",
+        "/var/lib", "/usr/lib", "/lib"
+      ],
+      "timeout_seconds": 30,
+      "max_file_size_mb": 10
+    },
+    "api": {
+      "host": "0.0.0.0",
+      "port": 3000,
+      "tool_server_port": 5000,
+      "cors_origins": ["http://localhost:3000", "http://localhost:8080"],
+      "rate_limit": {
+        "requests_per_minute": 60,
+        "requests_per_hour": 1000
+      }
+    },
+    "services": {
+      "litellm_url": "http://litellm:4000",
+      "redis_url": "redis://redis:6379",
+      "chroma_url": "http://chromadb:8000"
+    },
+    "security": {
+      "require_auth": false,
+      "jwt_secret": "change_this_in_production",
+      "jwt_expiry_hours": 24,
+      "allowed_hosts": ["localhost", "127.0.0.1", "raspberrypi.local"]
+    },
+    "logging": {
+      "level": "INFO",
+      "file": "/app/logs/agent.log",
+      "max_size_mb": 100,
+      "backup_count": 5
+    }
+  }

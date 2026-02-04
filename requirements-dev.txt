@@ -1,0 +1,35 @@
+# Development dependencies
+debugpy==1.8.0
+ipython==8.18.1
+ipdb==0.13.13
+watchdog==3.0.0
+
+# Code quality
+black==23.11.0
+flake8==6.1.0
+mypy==1.7.0
+isort==5.12.0
+pre-commit==3.5.0
+
+# Testing
+pytest==7.4.3
+pytest-asyncio==0.21.1
+pytest-cov==4.1.0
+pytest-xdist==3.5.0
+pytest-mock==3.12.0
+
+# Development tools
+python-dotenv==1.0.0
+jupyter==1.0.0
+jupyterlab==4.0.8
+
+# Monitoring and profiling
+py-spy==0.3.14
+memory-profiler==0.61.0
+psutil==5.9.6
+
+# HTTP client for testing
+httpie==3.2.2
+
+# API testing
+schemathesis==3.19.5

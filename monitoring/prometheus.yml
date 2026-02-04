@@ -1,0 +1,81 @@
+# monitoring/prometheus.yml
+global:
+  scrape_interval: 15s
+  evaluation_interval: 15s
+  scrape_timeout: 10s
+
+# Alerting rules
+rule_files:
+  # - "alerts.yml"
+
+# Scrape configurations
+scrape_configs:
+  # Prometheus itself
+  - job_name: 'prometheus'
+    static_configs:
+      - targets: ['localhost:9090']
+  
+  # Docker containers
+  - job_name: 'docker'
+    static_configs:
+      - targets: ['host.docker.internal:9323']
+    metrics_path: /metrics
+  
+  # AI Agent services
+  - job_name: 'ai-agent'
+    static_configs:
+      - targets:
+        - 'ai-agent:3000'   # Main agent
+        - 'litellm:4000'    # LiteLLM proxy
+        - 'chromadb:8000'   # ChromaDB
+    metrics_path: /metrics
+    scrape_interval: 30s
+  
+  # Node exporter (system metrics)
+  - job_name: 'node'
+    static_configs:
+      - targets: ['host.docker.internal:9100']
+  
+  # cAdvisor (container metrics)
+  - job_name: 'cadvisor'
+    static_configs:
+      - targets: ['host.docker.internal:8080']
+  
+  # Redis
+  - job_name: 'redis'
+    static_configs:
+      - targets: ['redis:9121']
+  
+  # Blackbox exporter (for HTTP checks)
+  - job_name: 'blackbox'
+    metrics_path: /probe
+    params:
+      module: [http_2xx]
+    static_configs:
+      - targets:
+        - http://ai-agent:3000/health
+        - http://litellm:4000/health
+        - http://chromadb:8000/api/v1/heartbeat
+    relabel_configs:
+      - source_labels: [__address__]
+        target_label: __param_target
+      - source_labels: [__param_target]
+        target_label: instance
+      - target_label: __address__
+        replacement: blackbox-exporter:9115
+
+# Alertmanager configuration
+alerting:
+  alertmanagers:
+    - static_configs:
+        - targets: []
+
+# Storage
+storage:
+  tsdb:
+    path: /prometheus
+    retention: 15d
+
+# Remote write (optional)
+# remote_write:
+#   - url: "http://remote-prometheus:9090/api/v1/write"

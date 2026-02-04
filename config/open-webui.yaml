@@ -1,0 +1,124 @@
+# open-webui.yaml
+# Configuration for Open WebUI
+
+# General settings
+general:
+  name: "AI Agent - Raspberry Pi 5"
+  description: "AI Assistant with Kimi 2.5k, Claude, and local models"
+  default_models:
+    - "kimi-2.5k"
+    - "local-codellama"
+    - "gpt-4o-mini"
+  default_locale: "en"
+  theme: "dark"
+  show_watermark: false
+  allow_registration: false
+  require_login: true
+
+# Model providers
+providers:
+  ollama:
+    enabled: true
+    base_url: "http://host.docker.internal:11434"
+    keep_alive: "5m"
+    models:
+      - "codellama:7b"
+      - "phi:2.7b"
+      - "mistral:7b"
+  
+  openai:
+    enabled: true
+    api_key: "litellm"  # Any string works with LiteLLM
+    base_url: "http://litellm:4000"
+    models:
+      - "kimi-2.5k"
+      - "kimi-1.8k"
+      - "gpt-4o-mini"
+      - "claude-3-haiku"
+  
+  anthropic:
+    enabled: false
+    # Uses LiteLLM proxy
+  
+  google:
+    enabled: false
+
+# Features
+features:
+  web_search:
+    enabled: false
+  image_generation:
+    enabled: false
+  file_upload:
+    enabled: true
+    max_size_mb: 10
+    allowed_extensions:
+      - ".txt"
+      - ".pdf"
+      - ".py"
+      - ".js"
+      - ".json"
+      - ".yaml"
+      - ".yml"
+      - ".md"
+  code_interpreter:
+    enabled: true
+  voice_input:
+    enabled: false
+
+# Security
+security:
+  cors_origins:
+    - "http://localhost:8080"
+    - "http://localhost:3000"
+    - "http://raspberrypi.local:8080"
+  rate_limiting:
+    enabled: true
+    requests_per_minute: 60
+  content_filter:
+    enabled: false
+
+# UI customization
+ui:
+  show_model_selector: true
+  show_temperature_control: true
+  show_max_tokens: true
+  show_system_prompt: true
+  enable_code_highlighting: true
+  default_chat_mode: "chat"
+  
+  sidebar:
+    visible: true
+    width: 280
+    show_models: true
+    show_history: true
+  
+  chat:
+    show_timestamps: true
+    show_avatar: true
+    streaming: true
+    markdown: true
+
+# Storage
+storage:
+  type: "json"  # or "database"
+  path: "/app/backend/data"
+  backup:
+    enabled: true
+    interval_hours: 24
+    keep_days: 7
+
+# Monitoring
+monitoring:
+  enabled: true
+  prometheus:
+    enabled: false
+  sentry:
+    enabled: false
+
+# Webhooks (optional)
+webhooks:
+  message_received:
+    enabled: false
+  conversation_created:
+    enabled: false

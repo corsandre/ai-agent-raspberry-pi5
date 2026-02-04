@@ -1,0 +1,41 @@
+{
+    "dashboard": {
+      "title": "AI Agent Dashboard",
+      "description": "Monitoring dashboard for AI Agent on Raspberry Pi 5",
+      "tags": ["ai", "raspberry-pi", "docker"],
+      "style": "dark",
+      "timezone": "browser",
+      "panels": [
+        {
+          "id": 1,
+          "title": "System Resources",
+          "type": "stat",
+          "targets": [
+            {
+              "expr": "100 - (avg by (instance) (rate(node_cpu_seconds_total{mode=\"idle\"}[5m])) * 100)",
+              "legendFormat": "CPU Usage"
+            },
+            {
+              "expr": "node_memory_MemTotal_bytes - node_memory_MemAvailable_bytes",
+              "legendFormat": "Memory Used"
+            }
+          ],
+          "gridPos": {"h": 8, "w": 12, "x": 0, "y": 0}
+        },
+        {
+          "id": 2,
+          "title": "Container Status",
+          "type": "table",
+          "targets": [
+            {
+              "expr": "container_last_seen",
+              "legendFormat": "Containers"
+            }
+          ],
+          "gridPos": {"h": 8, "w": 12, "x": 12, "y": 0}
+        }
+      ],
+      "time": {"from": "now-1h", "to": "now"},
+      "refresh": "30s"
+    }
+  }

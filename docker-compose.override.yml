@@ -1,0 +1,294 @@
+# docker-compose.override.yml
+# Development and local overrides for AI Agent
+# This file is automatically loaded by Docker Compose
+# Use for development, debugging, and local customization
+
+version: '3.8'
+
+services:
+  # Main agent development configuration
+  ai-agent:
+    # Development Dockerfile with debug tools
+    build:
+      context: .
+      dockerfile: Dockerfile.dev
+      args:
+        - BUILDKIT_INLINE_CACHE=1
+    
+    # Mount source code for hot reload
+    volumes:
+      - ./src:/app/src:rw
+      - ./config:/app/config:ro
+      - ./tests:/app/tests:rw
+      - ./scripts:/app/scripts:ro
+      - ai-workspace:/workspace
+      - ./logs:/app/logs
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+      # For VS Code dev containers
+      - ~/.vscode-server:/root/.vscode-server:ro
+    
+    # Development environment variables
+    environment:
+      - DEBUG=true
+      - RELOAD=true
+      - PYTHONPATH=/app
+      - PYTHONUNBUFFERED=1
+      - PYTHONDONTWRITEBYTECODE=1
+      - WATCHFILES_FORCE_POLLING=true
+      # Disable authentication for development
+      - SECURITY_REQUIRE_AUTH=false
+    
+    # Expose debug ports
+    ports:
+      - "3000:3000"   # Main API
+      - "5000:5000"   # Tool API
+      - "5678:5678"   # Python debugger
+      - "9229:9229"   # Node.js debugger
+    
+    # Development command with auto-reload
+    command: >
+      sh -c "
+        echo '🚀 Starting AI Agent in development mode...' &&
+        python -m debugpy --listen 0.0.0.0:5678 --wait-for-client -m uvicorn \
+          docker_main_agent:app \
+          --host 0.0.0.0 \
+          --port 3000 \
+          --reload \
+          --reload-dir /app/src \
+          --log-level debug
+      "
+    
+    # Development-only health check
+    healthcheck:
+      test: ["CMD", "python", "-c", "import requests; requests.get('http://localhost:3000/health', timeout=2)"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+      start_period: 30s
+    
+    # Development resource limits (generous)
+    deploy:
+      resources:
+        limits:
+          memory: 3G
+          cpus: '3.0'
+        reservations:
+          memory: 1G
+          cpus: '1.0'
+    
+    # Enable stdin for interactive debugging
+    stdin_open: true
+    tty: true
+    
+    # Development labels
+    labels:
+      - "ai-agent.environment=development"
+      - "ai-agent.debug.enabled=true"
+      - "com.docker.compose.project=ai-agent-dev"
+
+  # LiteLLM proxy development configuration
+  litellm:
+    # Development build
+    build:
+      context: ./litellm
+      dockerfile: Dockerfile.litellm.dev
+      args:
+        - DEV_MODE=true
+    
+    # Mount config for live updates
+    volumes:
+      - ./config/litellm_config.yaml:/app/config.yaml:ro
+      - ./config/models.json:/app/models.json:ro
+      - ./litellm/logs:/app/logs:rw
+    
+    # Development settings
+    environment:
+      - DEBUG=true
+      - LITELLM_LOG=DEBUG
+      - LITELLM_CACHE=False  # Disable cache in development
+      - LITELLM_MAX_PARALLEL_REQUESTS=5
+    
+    # Expose additional ports
+    ports:
+      - "4000:4000"
+      - "4001:4001"  # Metrics port
+    
+    command: ["litellm", "--config", "/app/config.yaml", "--port", "4000", "--host", "0.0.0.0", "--num_workers", "2", "--detailed_debug"]
+
+  # ChromaDB development configuration
+  chromadb:
+    # Development settings
+    environment:
+      - CHROMA_SERVER_LOG_LEVEL=DEBUG
+      - CHROMA_SERVER_CORS_ALLOW_ORIGINS=*
+      - CHROMA_ANONYMIZED_TELEMETRY=false
+    
+    # Mount data for persistence
+    volumes:
+      - chroma-data:/chroma/chroma
+      - ./data/chroma/backups:/backups:rw
+    
+    # Development ports
+    ports:
+      - "8000:8000"
+      - "8001:8001"  # Admin port
+    
+    # Development health check
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/api/v1"]
+      interval: 15s
+      timeout: 10s
+      retries: 5
+
+  # Redis development configuration
+  redis:
+    # Development configuration
+    command: redis-server --appendonly yes --save 900 1 --save 300 10 --save 60 10000 --loglevel verbose
+    
+    # Persist data
+    volumes:
+      - redis-data:/data
+      - ./config/redis.conf:/usr/local/etc/redis/redis.conf:ro
+    
+    # Development ports
+    ports:
+      - "6379:6379"
+      - "6380:6380"  # Sentinel port
+    
+    # Development health check
+    healthcheck:
+      test: ["CMD", "redis-cli", "--raw", "incr", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # Web UI development configuration
+  web-ui:
+    image: ghcr.io/open-webui/open-webui:main-arm64-dev
+    
+    # Mount for customization
+    volumes:
+      - webui-data:/app/backend/data
+      - ./config/open-webui.yaml:/app/backend/config.yaml:ro
+      - ./config/custom-theme.css:/app/backend/static/custom-theme.css:ro
+    
+    # Development environment
+    environment:
+      - WEBUI_DEBUG=true
+      - WEBUI_DEV_MODE=true
+      - WEBUI_ALLOW_INSECURE=true
+    
+    ports:
+      - "8080:8080"
+      - "8081:8081"  # Debug port
+
+  # Development monitoring stack
+  prometheus:
+    # Development config
+    volumes:
+      - ./monitoring/prometheus-dev.yml:/etc/prometheus/prometheus.yml:ro
+      - prometheus-data:/prometheus
+    
+    ports:
+      - "9090:9090"
+    
+    command:
+      - '--config.file=/etc/prometheus/prometheus.yml'
+      - '--storage.tsdb.path=/prometheus'
+      - '--web.enable-lifecycle'
+      - '--web.enable-admin-api'
+      - '--storage.tsdb.retention.time=7d'
+
+  grafana:
+    # Development config
+    volumes:
+      - grafana-data:/var/lib/grafana
+      - ./monitoring/dashboards:/etc/grafana/provisioning/dashboards:ro
+      - ./monitoring/datasources:/etc/grafana/provisioning/datasources:ro
+      - ./monitoring/plugins:/var/lib/grafana/plugins:rw
+    
+    environment:
+      - GF_DEFAULT_INSTANCE_NAME=AI-Agent-Dev
+      - GF_LOG_LEVEL=debug
+      - GF_LOG_MODE=console
+      - GF_FEATURE_TOGGLES_ENABLE=publicDashboards,panelTitleSearch,extraThemes
+    
+    ports:
+      - "3001:3000"
+
+  # Development-only services
+  portainer:
+    image: portainer/portainer-ce:latest
+    container_name: portainer
+    restart: unless-stopped
+    security_opt:
+      - no-new-privileges:true
+    volumes:
+      - /etc/localtime:/etc/localtime:ro
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+      - portainer-data:/data
+    ports:
+      - "9000:9000"
+    labels:
+      - "ai-agent.development=true"
+
+  # Database admin (optional)
+  adminer:
+    image: adminer:latest
+    restart: unless-stopped
+    ports:
+      - "8082:8080"
+    environment:
+      - ADMINER_DEFAULT_SERVER=redis
+
+  # Mailhog for email testing (optional)
+  mailhog:
+    image: mailhog/mailhog:latest
+    ports:
+      - "1025:1025"  # SMTP
+      - "8025:8025"  # Web UI
+
+# Development networks
+networks:
+  ai-network:
+    driver: bridge
+    driver_opts:
+      com.docker.network.driver.mtu: 1450
+    ipam:
+      config:
+        - subnet: 172.20.1.0/24
+          gateway: 172.20.1.1
+
+# Development volumes
+volumes:
+  redis-data:
+    driver: local
+    driver_opts:
+      type: none
+      o: bind
+      device: ./data/redis
+      device_type: bind
+  chroma-data:
+    driver: local
+    driver_opts:
+      type: none
+      o: bind
+      device: ./data/chroma
+      device_type: bind
+  ai-workspace:
+    driver: local
+    driver_opts:
+      type: none
+      o: bind
+      device: ./workspace
+      device_type: bind
+  webui-data:
+    driver: local
+    driver_opts:
+      type: none
+      o: bind
+      device: ./data/webui
+      device_type: bind
+  prometheus-data:
+  grafana-data:
+  portainer-data:
