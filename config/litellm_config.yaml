@@ -51,7 +51,7 @@ model_list:
   - model_name: local-codellama
     litellm_params:
       model: ollama/codellama:7b
-      api_base: http://host.docker.internal:11434
+      # api_base: http://host.docker.internal:11434  # COMMENTED OUT FOR NOW
     model_info:
       mode: "chat"
       max_tokens: 4096
@@ -61,7 +61,7 @@ model_list:
   - model_name: local-phi
     litellm_params:
       model: ollama/phi:2.7b
-      api_base: http://host.docker.internal:11434
+      # api_base: http://host.docker.internal:11434  # COMMENTED OUT FOR NOW
     model_info:
       mode: "chat"
       max_tokens: 2048
